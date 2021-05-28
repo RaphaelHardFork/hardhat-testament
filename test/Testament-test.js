@@ -47,8 +47,14 @@ describe('Testament', () => {
       expect(await testament.legacyOf(recipient1.address)).to.equal(BASIC_BEQUEATH)
     })
 
+    // sans la fonction changeEther
     it('should decrease balance of owner', async function () {
       expect(await owner.getBalance()).to.equal(ownerBalance.sub(BASIC_BEQUEATH))
+    })
+
+    // Avec la fonction changeEther
+    it('should decrease balance of owner', async function () {
+      expect(bequeath).to.changeEtherBalance(owner, BASIC_BEQUEATH.sub(BASIC_BEQUEATH.mul(2))) // = Number - (2xNumber)
     })
 
     it('should revert if zero address is choosen', async function () {
@@ -121,9 +127,36 @@ describe('Testament', () => {
   describe('Withdraw', function () {
     let withdrawTransaction
     beforeEach(async function () {
-      await testament.connect(owner).bequeath(recipient1.address, { value: BASIC_BEQUEATH, gasPrice: 0 })
+      await testament.connect(owner).bequeath(recipient1.address, { value: BASIC_BEQUEATH })
       await testament.connect(doctor).contractEnd()
       withdrawTransaction = await testament.connect(recipient1).withdraw()
+    })
+
+    it('should emit a LegacyWithdrew event', async function () {
+      expect(withdrawTransaction).to.emit(testament, 'LegacyWithdrew').withArgs(recipient1.address, BASIC_BEQUEATH)
+    })
+
+    it('should decrease legacy balance', async function () {
+      expect(await testament.legacyOf(recipient1.address)).to.equal(0)
+    })
+
+    it('should increase balance of the recipient1', async function () {
+      expect(withdrawTransaction).to.changeEtherBalance(recipient1, BASIC_BEQUEATH)
+    })
+
+    it('should revert if the legacy balance is empty', async function () {
+      await expect(testament.connect(recipient2).withdraw()).to.be.revertedWith(
+        'Testament: You do not have any legacy on this contract.'
+      )
+    })
+  })
+
+  describe('Misuse of the contract', function () {
+    it('should revert if a withdraw is called before contract end (modifier)', async function () {
+      await testament.connect(owner).bequeath(recipient1.address, { value: BASIC_BEQUEATH })
+      await expect(testament.connect(recipient1).withdraw()).to.be.revertedWith(
+        'Testament: The contract has not yet over.'
+      )
     })
   })
 })
